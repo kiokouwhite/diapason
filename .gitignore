@@ -1,0 +1,26 @@
+# ─── Diapason — .gitignore ───────────────────────────────────────────────
+
+# Artefacts de build .NET
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+
+# Exécutables générés — TROP LOURDS pour git / à distribuer via les Releases GitHub
+#  • dist/Diapason.exe          ~156 Mo (dépasse la limite GitHub de 100 Mo)
+#  • Setup-Tournoi-Diapason.exe ~79 Mo  (livrable — à mettre en Release)
+dist/Diapason.exe
+Setup-Tournoi-Diapason.exe
+
+# Fichiers d'exécution / config locale
+*.log
+slots.txt
+dist/slots.txt
+
+# Vieux scripts de dev (non utilisés par le produit)
+_archive/
+
+# Divers OS / éditeurs
+Thumbs.db
+.DS_Store

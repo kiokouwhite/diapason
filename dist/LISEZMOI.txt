@@ -1,0 +1,55 @@
+=====================================================================
+  DIAPASON - Kit de deploiement tournoi
+  Normalise toutes les manettes (Switch, PlayStation, etc.) en
+  manettes Xbox identiques. Fini les boutons inverses.
+=====================================================================
+
+CONTENU DU DOSSIER
+  - Diapason.exe ................. l'outil (autonome, rien a installer pour lui)
+  - 1-Installer-pilotes.ps1 ...... installe les 2 drivers necessaires
+  - 2-Lancer-Diapason.bat ........ lance Diapason (a la main)
+  - 3-Activer-demarrage-auto.ps1 . (option) le lance tout seul a chaque session
+  - Desactiver-demarrage-auto.ps1  (option) annule le demarrage auto
+  - LISEZMOI.txt ................. ce fichier
+
+---------------------------------------------------------------------
+SUR CHAQUE PC, UNE SEULE FOIS :
+---------------------------------------------------------------------
+  1. Clic droit sur "1-Installer-pilotes.ps1" > Executer avec PowerShell
+     (accepte la fenetre UAC). -> installe ViGEmBus + HidHide.
+  2. REDEMARRE le PC.
+
+---------------------------------------------------------------------
+UTILISATION :
+---------------------------------------------------------------------
+  Diapason tourne en ICONE dans la barre des taches (pas de fenetre).
+  - Pour le lancer a la main : double-clic sur "2-Lancer-Diapason.bat" (UAC).
+  - Branche les manettes : elles deviennent toutes des manettes Xbox
+    identiques. Diapason masque les manettes physiques tout seul.
+
+  Sur l'icone (zone de notification en bas a droite, parfois derriere ^) :
+    - Clic droit  -> menu : etat P1/P2, Echanger P1/P2, Quitter
+    - Ctrl+Alt+S  -> echange P1 / P2 (marche meme en plein jeu)
+    - Double-clic -> echange P1 / P2
+
+---------------------------------------------------------------------
+DEMARRAGE AUTOMATIQUE (recommande pour un PC de tournoi) :
+---------------------------------------------------------------------
+  Lance "3-Activer-demarrage-auto.ps1" (clic droit > Executer avec
+  PowerShell, UAC). Diapason demarrera alors TOUT SEUL (en admin, avec
+  son icone) a chaque ouverture de session -> plus rien a lancer.
+  (Pour annuler : "Desactiver-demarrage-auto.ps1".)
+  NB : ne deplace pas ce dossier apres avoir active le demarrage auto.
+
+---------------------------------------------------------------------
+SI WINDOWS BLOQUE L'EXE ("Smart App Control" / editeur inconnu) :
+---------------------------------------------------------------------
+  Diapason n'est pas signe. Sur un Windows 11 recent installe "propre",
+  il faut desactiver Smart App Control :
+    Securite Windows > Controle des applications et du navigateur >
+    Parametres de Controle intelligent des applications > Desactive.
+  (Les PC mis a niveau depuis Windows 10 ne sont generalement pas concernes.)
+
+  En cas de souci, un journal est ecrit dans :
+    %LOCALAPPDATA%\Diapason\diapason.log
+=====================================================================

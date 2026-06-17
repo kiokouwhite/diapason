@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Diapason</AssemblyName>
+    <RootNamespace>Diapason</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!--
+    Dépendances open source (le « moteur »). Les versions sont en flottant (*) :
+    au premier `dotnet restore`, NuGet récupère la dernière dispo. On pinnera
+    une fois le build validé.
+      - Nefarius.ViGEm.Client    : crée les manettes Xbox 360 virtuelles
+      - Nefarius.Drivers.HidHide : masque les manettes physiques au jeu
+      - ppy.SDL2-CS              : lit + normalise TOUTES les manettes
+                                   (Xbox / DualShock / Switch / sticks…)
+    NB : selon le package SDL retenu, il faudra peut-être déposer SDL2.dll (x64)
+         à côté de l'exe. À confirmer au premier build.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Nefarius.ViGEm.Client" Version="*" />
+    <PackageReference Include="Nefarius.Drivers.HidHide" Version="*" />
+    <PackageReference Include="ppy.SDL2-CS" Version="*" />
+  </ItemGroup>
+
+  <!-- Logo embarqué pour l'icône de la fenêtre et du tray (chargé via Program.LoadAppIcon). -->
+  <ItemGroup>
+    <EmbeddedResource Include="logo.ico" />
+  </ItemGroup>
+
+  <!--
+    SDL2 natif À JOUR (2.32.0). ppy.SDL2-CS embarque un SDL2.dll 2.0.14 (2020) qui PLANTE au
+    lancement d'un jeu Steam (race des backends WGI/RawInput). Ce Target dépose NOTRE 2.32.0 À
+    CÔTÉ de l'exe (bin + publish) ; au démarrage un DllImportResolver (Program.cs ResolveSdl2)
+    force le chargement de CE SDL2.dll voisin, jamais le 2.0.14 embarqué. -> Diapason.exe +
+    SDL2.dll se déploient ENSEMBLE (dist/ + installeur). Confirmé via SDL_GetVersion() (log).
+  -->
+  <Target Name="UseUpdatedSdl2" AfterTargets="Build;Publish">
+    <Copy SourceFiles="native\win-x64\SDL2.dll" DestinationFiles="$(OutDir)SDL2.dll"
+          OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" Condition="'$(OutDir)' != ''" />
+    <Copy SourceFiles="native\win-x64\SDL2.dll" DestinationFiles="$(PublishDir)SDL2.dll"
+          OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" Condition="'$(PublishDir)' != ''" />
+    <!-- Base de mappings manettes (élargit la reconnaissance des pads tiers / adaptateurs GameCube) -->
+    <Copy SourceFiles="native\gamecontrollerdb.txt" DestinationFiles="$(OutDir)gamecontrollerdb.txt"
+          OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" Condition="'$(OutDir)' != '' And Exists('native\gamecontrollerdb.txt')" />
+    <Copy SourceFiles="native\gamecontrollerdb.txt" DestinationFiles="$(PublishDir)gamecontrollerdb.txt"
+          OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" Condition="'$(PublishDir)' != '' And Exists('native\gamecontrollerdb.txt')" />
+  </Target>
+
+</Project>
