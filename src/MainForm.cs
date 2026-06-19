@@ -110,19 +110,42 @@ internal sealed class MainForm : Form
 
     private void Tick()
     {
-        var v = Program.GetSlotViews();
+        var v  = Program.GetSlotViews();
+        var xs = Program.GetXInputDevices();   // manettes Xbox physiques (affichées dans les slots libres)
+        var xi = 0;                            // prochaine Xbox à afficher dans un slot vide
+
         for (var i = 0; i < _pads.Length && i < v.Length; i++)
         {
-            _pads[i].Set(v[i].Connected, v[i].PlayStation, v[i].State);
-            _names[i].Text = $"P{i + 1}  —  " + (v[i].Connected ? v[i].Name : "aucune manette");
-            _names[i].ForeColor = v[i].Connected ? Color.White : Color.Gray;
+            if (v[i].Connected)
+            {
+                _pads[i].Set(true, v[i].PlayStation, v[i].State);
+                _names[i].Text = $"P{i + 1}  —  {v[i].Name}";
+                _names[i].ForeColor = Color.White;
+            }
+            else if (xi < xs.Length)
+            {
+                // Slot libéré (réduction Xbox) -> on y AFFICHE une manette Xbox détectée (indicatif,
+                // lue directement par le jeu ; ce n'est pas un slot P1/P2 géré). État des boutons en live.
+                _pads[i].Set(true, false, xs[xi].State);
+                _names[i].Text = $"🎮  {xs[xi].Name}  —  manette directe";
+                _names[i].ForeColor = Color.FromArgb(120, 180, 230);
+                xi++;
+            }
+            else
+            {
+                _pads[i].Set(false, false, default);
+                _names[i].Text = $"P{i + 1}  —  aucune manette";
+                _names[i].ForeColor = Color.Gray;
+            }
         }
 
-        var xs = Program.GetXInputDevices();
-        _xinput.Text = xs.Length == 0
-            ? ""
-            : "🎮 Manette(s) Xbox lue(s) directement par le jeu (hors P1/P2) :   " +
-              string.Join("     ", xs.Select(x => x.Name + (x.Active ? "  ●" : "")));
+        // Bande basse : explication (Xbox affichées dans les slots) + éventuel surplus sans slot libre.
+        if (xs.Length == 0)
+            _xinput.Text = "";
+        else if (xi >= xs.Length)
+            _xinput.Text = "🎮 La manette Xbox est lue directement par le jeu (affichée à titre indicatif, hors gestion P1/P2).";
+        else
+            _xinput.Text = "🎮 Manette(s) Xbox en plus (lues directement) :   " + string.Join("    ", xs.Skip(xi).Select(x => x.Name));
 
         var (mask, reason) = Program.MaskingStatus();
         if (mask)

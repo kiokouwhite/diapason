@@ -38,6 +38,7 @@ Source: "..\dist\3-Activer-demarrage-auto.ps1";  DestDir: "{app}"; Flags: ignore
 Source: "..\dist\Desactiver-demarrage-auto.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\LISEZMOI.txt";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\DEBLOQUER-MANETTES.bat";        DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\Diagnostic-Diapason.bat";       DestDir: "{app}"; Flags: ignoreversion
 Source: "_install-drivers.ps1";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "_register-autostart.ps1";               DestDir: "{app}"; Flags: ignoreversion
 ; Pilotes embarques (installeur 100% autonome, sans internet ni winget).

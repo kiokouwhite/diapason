@@ -35,9 +35,9 @@ internal static class Program
 
     private static readonly Dictionary<int, ControllerBridge> Bridges = new();   // SDL instanceId -> bridge (manettes GÉRÉES)
     private static readonly Dictionary<int, ControllerBridge> XInputDevices = new();  // Xbox PHYSIQUES : détectées/affichées, NON gérées (ni pad, ni slot, ni masquage)
-    private static readonly HashSet<int> OwnXboxSdlIds = new();                   // instanceId SDL de NOS pads ViGEm (recensés au démarrage) -> distinguer une VRAIE Xbox
     private static readonly HidHideManager HidHide = new();
     private static readonly IXbox360Controller[] Pads = new IXbox360Controller[SlotCount];  // pads permanents (slots)
+    private static readonly bool[] PadConnected = new bool[SlotCount];   // pad ViGEm i connecté ? (on en déconnecte quand une Xbox physique est branchée, pour éviter le surplus)
     private static readonly ControllerBridge?[] Slot = new ControllerBridge?[SlotCount];    // occupant par slot
     private static readonly object Gate = new();      // sync boucle de fond <-> UI
     private static readonly object LogLock = new();
@@ -66,12 +66,11 @@ internal static class Program
         try { Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!); } catch { /* ignore */ }
         Log("=== Diapason — démarrage ===");
 
-        // Filet : sur exception MANAGÉE non gérée, on réaffiche les manettes (un AV natif SDL,
-        // lui, ne passera pas par ici -> voir DEBLOQUER-MANETTES.bat pour le cas extrême).
+        // Filet : sur exception MANAGÉE non gérée (thread de fond), on logue le DÉTAIL COMPLET
+        // (type + message + pile d'appel), on réaffiche les manettes, et on montre un rapport de crash.
+        // (Un AV natif SDL, lui, ne passe PAS par ici -> voir le journal Windows / DEBLOQUER-MANETTES.bat.)
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-        {
-            try { Log("UNHANDLED : " + (e.ExceptionObject as Exception)?.Message); HidHide.Cleanup(); } catch { /* ignore */ }
-        };
+            CrashReport("thread de fond", e.ExceptionObject as Exception);
 
         // --- Hints SDL : OBLIGATOIREMENT avant SDL_Init ---
         // Hot-plug fiable (le thread interne SDL pompe WM_DEVICECHANGE et ne fait que poser un flag).
@@ -138,6 +137,7 @@ internal static class Program
             pad.Connect();
             Neutralize(pad);
             Pads[i] = pad;
+            PadConnected[i] = true;
             System.Threading.Thread.Sleep(250);
         }
         Log($"{SlotCount} slots réservés (P1..P{SlotCount}).");
@@ -148,6 +148,10 @@ internal static class Program
 
         // --- Interface : fenêtre cachée (hotkey + invoke) + icône barre des tâches ---
         Application.EnableVisualStyles();
+        // Capter les exceptions du thread d'INTERFACE : loguées + rapport de crash, et Diapason
+        // SURVIT (CatchException) au lieu de mourir sur une erreur d'UI isolée.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => CrashReport("interface", e.Exception);
 
         _trayForm = new TrayForm(DoSwap);
         _ = _trayForm.Handle;   // force la création du handle -> enregistre le raccourci Ctrl+Alt+S
@@ -225,12 +229,7 @@ internal static class Program
 
     private static void PollLoop()
     {
-        lock (Gate)
-        {
-            SDL_GameControllerUpdate();
-            SnapshotOwnXboxPads();   // recense NOS pads ViGEm avant de pouvoir reconnaître une vraie Xbox
-            RescanControllers();
-        }
+        lock (Gate) RescanControllers();
         var rescanTick = 0;
 
         while (_running)
@@ -338,6 +337,8 @@ internal static class Program
 
     private static int FirstFreeSlot()
     {
+        for (var i = 0; i < SlotCount; i++)         // préfère un slot dont le pad est déjà connecté
+            if (Slot[i] is null && PadConnected[i]) return i;
         for (var i = 0; i < SlotCount; i++)
             if (Slot[i] is null) return i;
         return -1;
@@ -367,20 +368,27 @@ internal static class Program
         if (type == SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOX360 ||
             type == SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOXONE)
         {
-            if (OwnXboxSdlIds.Contains(instanceId))   // un de NOS pads virtuels -> ignorer (zéro boucle)
+            // Physique vs NOS pads ViGEm : (Xbox vues par SDL) - (nos pads connectés) = physiques attendues.
+            // Si on en a déjà autant -> celle-ci est un de nos pads / une reconnexion -> ignorer (zéro boucle).
+            var connectedVirtual = PadConnected.Count(c => c);
+            var expectedPhysical = Math.Max(0, CountSdlXboxControllers() - connectedVirtual);
+            if (XInputDevices.Count < expectedPhysical)
             {
-                SDL_GameControllerClose(handle);
-                return;
+                var xname = SDL_GameControllerName(handle);
+                XInputDevices[instanceId] = new ControllerBridge(handle, null, xname);   // Pad = null : lue, pas pilotée
+                Log($"[=] « {xname} » détectée (Xbox/XInput physique — lue directement par le jeu, hors P1/P2).");
+                PushStatus();   // -> ReconcileVirtualPads : libère un pad virtuel inutilisé (évite le surplus)
             }
-            var xname = SDL_GameControllerName(handle);
-            XInputDevices[instanceId] = new ControllerBridge(handle, null, xname);   // Pad = null : lue, pas pilotée
-            Log($"[=] « {xname} » détectée (Xbox/XInput physique — lue directement par le jeu, hors P1/P2).");
-            PushStatus();
+            else
+            {
+                SDL_GameControllerClose(handle);   // un de NOS pads ViGEm (ou reconnexion) -> ignorer
+            }
             return;
         }
 
         var name = SDL_GameControllerName(handle);
         var slot = FirstFreeSlot();   // -1 si tous les slots sont pris -> manette INACTIVE (assignable via le menu)
+        if (slot >= 0) EnsurePadConnected(slot, true);   // le pad du slot peut avoir été déconnecté (Xbox physique) -> le ramener
 
         // On NE ferme PLUS les manettes en trop : on les garde « inactives » (Pad = null) pour pouvoir
         // les mettre sur P1/P2 à la demande (menu Manettes -> Assigner). Elles sont quand même masquées.
@@ -417,22 +425,53 @@ internal static class Program
             RemoveXInput(id);
     }
 
-    // Recense les pads Xbox VIRTUELS présents au démarrage (= NOS pads ViGEm créés juste avant, AVANT que
-    // les joueurs branchent leurs manettes). Toute Xbox NON recensée ici est ensuite traitée comme une
-    // VRAIE manette physique. NB : si une vraie Xbox est déjà branchée au lancement de Diapason, la
-    // rebrancher après démarrage pour qu'elle soit détectée comme physique.
-    private static void SnapshotOwnXboxPads()
+    // Nombre de manettes de type Xbox que SDL voit ACTUELLEMENT (= nos pads ViGEm connectés + les
+    // vraies Xbox physiques). Sert à déduire le nombre de physiques sans dépendre d'un snapshot.
+    private static int CountSdlXboxControllers()
     {
-        var n = SDL_NumJoysticks();
-        for (var i = 0; i < n; i++)
+        var n = 0; var total = SDL_NumJoysticks();
+        for (var i = 0; i < total; i++)
         {
             if (SDL_IsGameController(i) == SDL_bool.SDL_FALSE) continue;
             var t = SDL_GameControllerTypeForIndex(i);
             if (t == SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOX360 ||
-                t == SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOXONE)
-                OwnXboxSdlIds.Add(SDL_JoystickGetDeviceInstanceID(i));
+                t == SDL_GameControllerType.SDL_CONTROLLER_TYPE_XBOXONE) n++;
         }
-        Log($"{OwnXboxSdlIds.Count} pad(s) Xbox virtuel(s) recensé(s) (référence anti-boucle ; attendu : {SlotCount}).");
+        return n;
+    }
+
+    // Connecte/déconnecte un pad ViGEm (fail-safe). Suivi dans PadConnected[].
+    private static void EnsurePadConnected(int i, bool connected)
+    {
+        if (i < 0 || i >= SlotCount || PadConnected[i] == connected) return;
+        try
+        {
+            if (connected) { Pads[i].Connect(); PadConnected[i] = true; Neutralize(Pads[i]); L($"pad P{i + 1} reconnecté"); }
+            else           { Pads[i].Disconnect(); PadConnected[i] = false; L($"pad P{i + 1} déconnecté (manette Xbox physique branchée)"); }
+        }
+        catch (Exception ex) { Log($"   (dé)connexion pad P{i + 1} échouée : {ex.Message}"); }
+    }
+    private static void L(string m) => Log("   " + m);
+
+    // Réduit le nombre de pads virtuels CONNECTÉS quand des manettes Xbox PHYSIQUES sont branchées,
+    // pour que le jeu ne voie pas un surplus. On ne déconnecte JAMAIS un pad occupé.
+    // total visible = max(occupés + physiques, SlotCount) -> 1 Xbox physique « consomme » 1 pad libre.
+    private static void ReconcileVirtualPads()
+    {
+        var occupied = Slot.Count(s => s != null);
+        var physical = XInputDevices.Count;
+        var target   = Math.Clamp(Math.Max(occupied, SlotCount - physical), 0, SlotCount);
+
+        for (var i = 0; i < SlotCount; i++)        // les pads occupés DOIVENT rester connectés
+            if (Slot[i] != null) EnsurePadConnected(i, true);
+
+        var idleToKeep = target - occupied;        // pads libres à garder connectés (indices les + bas)
+        for (var i = 0; i < SlotCount; i++)
+        {
+            if (Slot[i] != null) continue;
+            if (idleToKeep > 0) { EnsurePadConnected(i, true); idleToKeep--; }
+            else EnsurePadConnected(i, false);
+        }
     }
 
     private static void RemoveController(int instanceId)
@@ -462,8 +501,7 @@ internal static class Program
         Log($"[-] « {b.Name} » (Xbox/XInput) débranchée");
         b.Dispose();
         XInputDevices.Remove(instanceId);
-        OwnXboxSdlIds.Remove(instanceId);
-        PushStatus();
+        PushStatus();   // -> ReconcileVirtualPads : reconnecte un pad virtuel (la Xbox est partie)
     }
 
     // Échange quelle manette physique alimente P1 vs P2 (on échange les SOURCES, pas les
@@ -558,8 +596,8 @@ internal static class Program
 
     private static void Neutralize(IXbox360Controller pad)
     {
-        pad.ResetReport();
-        pad.SubmitReport();
+        // try/catch : le pad peut être déconnecté (réduction de slots quand une Xbox physique est branchée).
+        try { pad.ResetReport(); pad.SubmitReport(); } catch { /* pad déconnecté */ }
     }
 
     // ---- Statut / UI ----
@@ -575,7 +613,7 @@ internal static class Program
     private static void PushStatus()
     {
         string s;
-        lock (Gate) { s = BuildStatus(); }   // lock ré-entrant : OK même si déjà tenu
+        lock (Gate) { ReconcileVirtualPads(); s = BuildStatus(); }   // lock ré-entrant : OK même si déjà tenu
         Log("   " + s);
         try { _trayForm?.BeginInvoke((Action)(() => ApplyStatus(s))); } catch { /* UI pas prête */ }
     }
@@ -621,18 +659,12 @@ internal static class Program
             }).ToArray();
     }
 
-    // Manettes Xbox/XInput physiques détectées (affichées dans le testeur, NON gérées).
-    internal static (string Name, bool Active)[] GetXInputDevices()
+    // Manettes Xbox/XInput physiques détectées (affichées dans le testeur, NON gérées) : nom + état live.
+    internal static (string Name, PadState State)[] GetXInputDevices()
     {
         lock (Gate)
-            return XInputDevices.Values.Select(b => (b.Name, IsActive(b.State))).ToArray();
+            return XInputDevices.Values.Select(b => (b.Name, b.State)).ToArray();
     }
-
-    private static bool IsActive(PadState s) =>
-        s.A || s.B || s.X || s.Y || s.LB || s.RB || s.Start || s.Back || s.Guide ||
-        s.Up || s.Down || s.Left || s.Right || s.L3 || s.R3 || s.LT > 40 || s.RT > 40 ||
-        Math.Abs((int)s.LX) > 12000 || Math.Abs((int)s.LY) > 12000 ||
-        Math.Abs((int)s.RX) > 12000 || Math.Abs((int)s.RY) > 12000;
 
     internal static (bool masking, string reason) MaskingStatus() => (HidHide.IsMasking, HidHide.Reason);
 
@@ -723,5 +755,41 @@ internal static class Program
     {
         Log("FATAL : " + msg);
         try { MessageBox.Show(msg, "Diapason — erreur", MessageBoxButtons.OK, MessageBoxIcon.Error); } catch { /* ignore */ }
+    }
+
+    // Rapport de crash : logue le DÉTAIL COMPLET (type + message + pile d'appel), réaffiche les
+    // manettes, et propose d'OUVRIR LE JOURNAL en un clic -> la cause est facile à voir, même quand
+    // le menu n'est plus accessible. NB : un crash NATIF (ex. SDL) ne passe pas ici -> Observateur
+    // d'événements Windows (Journaux Windows > Application).
+    private static volatile bool _crashDialogOpen;
+    private static void CrashReport(string source, Exception? ex)
+    {
+        try { Log($"=== CRASH ({source}) ===" + Environment.NewLine + (ex?.ToString() ?? "(exception inconnue)")); } catch { /* ignore */ }
+        try { HidHide.Cleanup(); } catch { /* ignore */ }
+        if (_crashDialogOpen) return;   // pas d'empilement de boîtes si erreurs en rafale
+        _crashDialogOpen = true;
+        try
+        {
+            var r = MessageBox.Show(
+                $"Diapason a rencontré une erreur ({source}) :\n\n{ex?.Message}\n\n" +
+                "Le détail complet est enregistré dans le journal.\nL'ouvrir maintenant ?",
+                "Diapason — erreur", MessageBoxButtons.YesNo, MessageBoxIcon.Error);
+            if (r == DialogResult.Yes) OpenLogFile();
+        }
+        catch { /* ignore */ }
+        finally { _crashDialogOpen = false; }
+    }
+
+    // Ouvre le journal (depuis le menu OU le rapport de crash). Marche même après un plantage.
+    internal static void OpenLogFile()
+    {
+        try
+        {
+            if (File.Exists(_logPath))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = _logPath, UseShellExecute = true });
+            else
+                MessageBox.Show("Pas encore de journal.", "Diapason", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch { /* ignore */ }
     }
 }
