@@ -6,7 +6,7 @@
 
 [Setup]
 AppName={#AppName}
-AppVersion=1.0
+AppVersion=1.1
 AppPublisher=Association FGC
 DefaultDirName={autopf}\Diapason
 DefaultGroupName=Diapason
