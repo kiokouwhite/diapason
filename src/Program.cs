@@ -29,6 +29,10 @@ internal static class Program
     private const int PollDelayMs = 1;    // ~1000 Hz
     internal static readonly int SlotCount = ReadSlotCount();   // 2 par défaut ; slots.txt / menu pour 3-4
 
+    // Version locale (source de vérité = <Version> du csproj). Comparée aux Releases GitHub pour la MAJ.
+    internal static readonly string Version =
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version is { } v ? $"{v.Major}.{v.Minor}" : "1.0";
+
     private static readonly Dictionary<int, ControllerBridge> Bridges = new();   // SDL instanceId -> bridge (manettes GÉRÉES)
     private static readonly Dictionary<int, ControllerBridge> XInputDevices = new();  // Xbox PHYSIQUES : détectées/affichées, NON gérées (ni pad, ni slot, ni masquage)
     private static readonly HashSet<int> OwnXboxSdlIds = new();                   // instanceId SDL de NOS pads ViGEm (recensés au démarrage) -> distinguer une VRAIE Xbox
@@ -47,6 +51,8 @@ internal static class Program
     private static MainForm _mainForm = null!;
     private static NotifyIcon _tray = null!;
     private static ToolStripMenuItem _statusItem = null!;
+    private static ToolStripMenuItem _updateItem = null!;   // « Vérifier les MAJ » / « Mettre à jour »
+    private static volatile bool _updateAvailable;
 
     [STAThread]
     private static int Main()
@@ -157,6 +163,9 @@ internal static class Program
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Échanger P1 / P2  (Ctrl+Alt+S)", null, (_, _) => DoSwap()));
         menu.Items.Add(new ToolStripSeparator());
+        _updateItem = new ToolStripMenuItem("Vérifier les mises à jour", null, (_, _) => OnUpdateClick());
+        menu.Items.Add(_updateItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Quitter", null, (_, _) => Application.Exit()));
 
         _tray = new NotifyIcon
@@ -188,6 +197,8 @@ internal static class Program
 
         PushStatus();
         _mainForm.Show();    // fenêtre testeur à l'ouverture (croix = réduire dans le tray)
+        Log($"Diapason version {Version}");
+        CheckUpdatesStartup();   // vérifie en arrière-plan si une Release plus récente existe
         Application.Run();   // boucle de messages jusqu'à « Quitter » (Application.Exit)
 
         // --- Arrêt propre ---
@@ -259,6 +270,70 @@ internal static class Program
     internal static void DoSwap()
     {
         lock (Gate) SwapP1P2();
+    }
+
+    // ── Mise à jour intégrée (Releases GitHub) ──────────────────────────────────
+    // Vérification silencieuse au démarrage (arrière-plan).
+    private static async void CheckUpdatesStartup()
+    {
+        if (await UpdateChecker.CheckAsync(Log)) MarkUpdateAvailable(showBalloon: true);
+    }
+
+    // Clic sur l'entrée de menu : MAJ dispo -> on l'applique ; sinon -> on vérifie maintenant.
+    internal static void OnUpdateClick()
+    {
+        if (_updateAvailable) StartUpdate();
+        else DoManualCheck();
+    }
+
+    private static async void DoManualCheck()
+    {
+        if (await UpdateChecker.CheckAsync(Log)) { MarkUpdateAvailable(showBalloon: false); StartUpdate(); }
+        else MessageBox.Show($"Diapason est à jour (version {Version}).",
+            "Diapason — mises à jour", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    // Met le menu en évidence + bulle d'info quand une version plus récente est trouvée.
+    private static void MarkUpdateAvailable(bool showBalloon)
+    {
+        _updateAvailable = true;
+        void Apply()
+        {
+            if (_updateItem != null)
+            {
+                _updateItem.Text = $"⬆ Mettre à jour — Diapason {UpdateChecker.LatestVersion} dispo";
+                _updateItem.Font = new Font(_updateItem.Font, FontStyle.Bold);
+            }
+            if (showBalloon)
+                _tray?.ShowBalloonTip(9000, "Mise à jour disponible",
+                    $"Diapason {UpdateChecker.LatestVersion} est disponible. Clic droit sur l'icône → Mettre à jour.",
+                    ToolTipIcon.Info);
+        }
+        try { _trayForm?.BeginInvoke((Action)Apply); } catch { /* UI pas prête */ }
+    }
+
+    private static async void StartUpdate()
+    {
+        var r = MessageBox.Show(
+            $"Mettre à jour vers Diapason {UpdateChecker.LatestVersion} ?\n\n" +
+            "Diapason va télécharger l'installeur puis se fermer pour l'appliquer.",
+            "Mise à jour Diapason", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (r != DialogResult.Yes) return;
+        try
+        {
+            if (_updateItem != null) { _updateItem.Text = "Téléchargement de la mise à jour…"; _updateItem.Enabled = false; }
+            _tray?.ShowBalloonTip(5000, "Mise à jour Diapason", "Téléchargement en cours…", ToolTipIcon.Info);
+            await UpdateChecker.DownloadAndRunAsync(Log);   // télécharge l'installeur, le lance, puis quitte
+        }
+        catch (Exception ex)
+        {
+            if (_updateItem != null) { _updateItem.Text = "⬆ Mettre à jour — réessayer"; _updateItem.Enabled = true; }
+            var go = MessageBox.Show("Échec du téléchargement :\n" + ex.Message +
+                "\n\nOuvrir la page de téléchargement dans le navigateur ?",
+                "Diapason — mise à jour", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (go == DialogResult.Yes && UpdateChecker.ReleaseUrl != null)
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = UpdateChecker.ReleaseUrl, UseShellExecute = true }); } catch { /* ignore */ }
+        }
     }
 
     private static int FirstFreeSlot()

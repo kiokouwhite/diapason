@@ -205,6 +205,7 @@ internal sealed class MainForm : Form
         pads.DropDownOpening += (_, _) => RebuildAssignMenu(assign);   // reconstruit la liste à chaque ouverture
 
         var help = new ToolStripMenuItem("Aide") { ForeColor = Color.Gainsboro };
+        help.DropDownItems.Add(Item("Vérifier les mises à jour", () => Program.OnUpdateClick()));
         help.DropDownItems.Add(Item("À propos de Diapason", About));
 
         menu.Items.Add(tools);
@@ -365,7 +366,7 @@ internal sealed class MainForm : Form
 
     private static void About()
         => MessageBox.Show(
-            "Diapason — normaliseur de manettes pour les tournois FGC.\n\n" +
+            $"Diapason — normaliseur de manettes pour les tournois FGC.\nVersion {Program.Version}\n\n" +
             "Toutes les manettes (Switch, PlayStation, Xbox…) deviennent des manettes Xbox identiques, " +
             "et les manettes physiques sont masquées au jeu (fini les boutons inversés).\n\n" +
             "Association FGC.",
