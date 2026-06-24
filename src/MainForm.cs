@@ -22,9 +22,9 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Diapason — testeur de manettes";
-        BackColor = Color.FromArgb(24, 26, 31);
-        ForeColor = Color.Gainsboro;
+        Text = "Diapason";
+        BackColor = Color.FromArgb(21, 15, 36);   // prune sombre (thème logo)
+        ForeColor = Color.FromArgb(200, 187, 230);
         Font = new Font("Segoe UI", 9f);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -69,7 +69,7 @@ internal sealed class MainForm : Form
                 Font = new Font("Segoe UI Semibold", 11f, FontStyle.Bold),
             };
             name.SetBounds(x, y, padW, nameH);
-            var pad = new PadPanel { Tag = i, AllowDrop = true };
+            var pad = new PadPanel { Tag = i, AllowDrop = true, Accent = AccentForSlot(i, n) };
             pad.SetBounds(x, y + nameH, padW, padH);
             pad.MouseDown += Pad_MouseDown;
             pad.DragEnter += Pad_DragEnter;
@@ -87,11 +87,11 @@ internal sealed class MainForm : Form
             Text = "Échanger P1 / P2   (Ctrl+Alt+S)",
             Size = new Size(220, 28),
             FlatStyle = FlatStyle.Flat,
-            ForeColor = Color.Gainsboro,
-            BackColor = Color.FromArgb(45, 48, 56),
+            ForeColor = Color.FromArgb(220, 205, 240),
+            BackColor = Color.FromArgb(46, 37, 70),
         };
         swap.Location = new Point((width - swap.Width) / 2, btnY + 6);
-        swap.FlatAppearance.BorderColor = Color.FromArgb(80, 85, 95);
+        swap.FlatAppearance.BorderColor = Color.FromArgb(70, 58, 102);
         swap.Click += (_, _) => Program.DoSwap();
         Controls.Add(swap);
 
@@ -99,7 +99,7 @@ internal sealed class MainForm : Form
         _xinput.SetBounds(mx, btnY + 40, width - 2 * mx, xinfoH);
         _xinput.AutoSize = false;
         _xinput.TextAlign = ContentAlignment.MiddleCenter;
-        _xinput.ForeColor = Color.FromArgb(120, 180, 230);
+        _xinput.ForeColor = Color.FromArgb(170, 180, 242);   // pervenche clair
         _xinput.Font = new Font("Segoe UI", 8.5f);
         Controls.Add(_xinput);
 
@@ -120,7 +120,7 @@ internal sealed class MainForm : Form
             {
                 _pads[i].Set(true, v[i].PlayStation, v[i].State);
                 _names[i].Text = $"P{i + 1}  —  {v[i].Name}";
-                _names[i].ForeColor = Color.White;
+                _names[i].ForeColor = Color.FromArgb(241, 236, 251);
             }
             else if (xi < xs.Length)
             {
@@ -128,14 +128,14 @@ internal sealed class MainForm : Form
                 // lue directement par le jeu ; ce n'est pas un slot P1/P2 géré). État des boutons en live.
                 _pads[i].Set(true, false, xs[xi].State);
                 _names[i].Text = $"🎮  {xs[xi].Name}  —  manette directe";
-                _names[i].ForeColor = Color.FromArgb(120, 180, 230);
+                _names[i].ForeColor = Color.FromArgb(170, 180, 242);
                 xi++;
             }
             else
             {
                 _pads[i].Set(false, false, default);
                 _names[i].Text = $"P{i + 1}  —  aucune manette";
-                _names[i].ForeColor = Color.Gray;
+                _names[i].ForeColor = Color.FromArgb(129, 117, 160);
             }
         }
 
@@ -151,8 +151,8 @@ internal sealed class MainForm : Form
         if (mask)
         {
             _status.Text = "●  Masquage actif — les manettes physiques sont cachées du jeu";
-            _status.ForeColor = Color.FromArgb(102, 187, 106);
-            _status.BackColor = Color.FromArgb(28, 40, 30);
+            _status.ForeColor = Color.FromArgb(180, 166, 236);   // pervenche (thème logo)
+            _status.BackColor = Color.FromArgb(36, 29, 56);
         }
         else
         {
@@ -191,13 +191,21 @@ internal sealed class MainForm : Form
             Program.MoveSlot(src, dst);
     }
 
+    // Couleur « allumée » d'un slot : dégradé pervenche (P1) -> rose (P2), comme le logo.
+    private static Color AccentForSlot(int i, int n)
+    {
+        var t = n <= 1 ? 0.0 : (double)i / (n - 1);
+        int L(int a, int b) => (int)Math.Round(a + (b - a) * t);
+        return Color.FromArgb(L(124, 200), L(135, 121), L(230, 210));   // #7c87e6 -> #c879d2
+    }
+
     // ---- Barre de menus ----
     private static MenuStrip BuildMenu()
     {
         var menu = new MenuStrip
         {
-            BackColor = Color.FromArgb(36, 39, 46),
-            ForeColor = Color.Gainsboro,
+            BackColor = Color.FromArgb(36, 29, 56),   // prune
+            ForeColor = Color.FromArgb(220, 205, 240),
             Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()) { RoundedEdges = false },
             Padding = new Padding(6, 2, 0, 2),
         };
@@ -401,9 +409,9 @@ internal sealed class MainForm : Form
     // Palette sombre pour la barre de menus (sinon menu clair par défaut, qui jure avec le thème).
     private sealed class DarkMenuColors : ProfessionalColorTable
     {
-        private static readonly Color Bar = Color.FromArgb(36, 39, 46);
-        private static readonly Color Hover = Color.FromArgb(60, 64, 74);
-        private static readonly Color Edge = Color.FromArgb(80, 85, 95);
+        private static readonly Color Bar = Color.FromArgb(36, 29, 56);    // prune
+        private static readonly Color Hover = Color.FromArgb(60, 51, 88);  // lilas survol
+        private static readonly Color Edge = Color.FromArgb(70, 58, 102);  // bord lilas
         public override Color MenuStripGradientBegin => Bar;
         public override Color MenuStripGradientEnd => Bar;
         public override Color ToolStripDropDownBackground => Bar;
@@ -460,17 +468,19 @@ internal sealed class PadPanel : Panel
     /// <summary>Surligne le panneau comme cible de dépôt (glisser-déposer).</summary>
     public bool Highlight { set { if (_highlight != value) { _highlight = value; Invalidate(); } } }
 
-    // Palette
-    private static readonly Color Bg       = Color.FromArgb(30, 33, 40);
-    private static readonly Color Border   = Color.FromArgb(70, 75, 85);
-    private static readonly Color Idle     = Color.FromArgb(70, 75, 85);
-    private static readonly Color IdleFill = Color.FromArgb(40, 43, 51);
-    private static readonly Color Accent   = Color.FromArgb(0, 153, 255);
-    private static readonly Color Label    = Color.FromArgb(210, 214, 220);
-    private static readonly Color AGreen   = Color.FromArgb(76, 175, 80);
-    private static readonly Color BRed     = Color.FromArgb(229, 57, 53);
-    private static readonly Color XBlue    = Color.FromArgb(33, 150, 243);
-    private static readonly Color YYellow  = Color.FromArgb(253, 216, 53);
+    // Palette — thème « Diapason » : prune sombre + dégradé pervenche->rose du logo.
+    private static readonly Color Bg       = Color.FromArgb(36, 29, 56);    // surface carte (prune)
+    private static readonly Color Border   = Color.FromArgb(60, 51, 88);    // contour carte
+    private static readonly Color Idle     = Color.FromArgb(94, 84, 120);   // contour au repos (lilas-gris)
+    private static readonly Color IdleFill = Color.FromArgb(39, 31, 60);    // remplissage au repos
+    private static readonly Color Label    = Color.FromArgb(200, 187, 230); // libellés
+    // Couleur « allumée » du panneau : PROPRE À CHAQUE manette (P1 pervenche, P2 rose = bouts du dégradé).
+    public Color Accent { get; set; } = Color.FromArgb(139, 127, 208);
+    // Boutons de face recolorés dans la famille du logo (4 teintes : bleu->violet->orchidée->rose).
+    private static readonly Color AGreen   = Color.FromArgb(142, 152, 238); // A (bas)    — pervenche
+    private static readonly Color BRed     = Color.FromArgb(214, 143, 218); // B (droite) — rose
+    private static readonly Color XBlue    = Color.FromArgb(169, 140, 224); // X (gauche) — violet
+    private static readonly Color YYellow  = Color.FromArgb(207, 150, 224); // Y (haut)   — orchidée
     // Symboles PlayStation (couleurs classiques)
     private enum Sym { Cross, Circle, Square, Triangle }
     private static readonly Color PsBlue  = Color.FromArgb(72, 138, 226);   // ✕
@@ -511,7 +521,7 @@ internal sealed class PadPanel : Panel
         if (!_connected)
         {
             using var f = new Font("Segoe UI", 11f);
-            using var br = new SolidBrush(Color.Gray);
+            using var br = new SolidBrush(Color.FromArgb(129, 117, 160));   // lilas-gris
             var msg = "Branche une manette";
             var sz = g.MeasureString(msg, f);
             g.DrawString(msg, f, br, (Width - sz.Width) / 2f, (Height - sz.Height) / 2f);
@@ -618,7 +628,7 @@ internal sealed class PadPanel : Panel
         }
     }
 
-    private static void Shoulder(Graphics g, Rectangle rect, string label, bool on)
+    private void Shoulder(Graphics g, Rectangle rect, string label, bool on)
     {
         using var fill = new SolidBrush(on ? Accent : IdleFill);
         using var pen = new Pen(on ? Accent : Idle, 2f);
@@ -629,7 +639,7 @@ internal sealed class PadPanel : Panel
         g.DrawString(label, f, tb, rect.X + (rect.Width - sz.Width) / 2f, rect.Y + (rect.Height - sz.Height) / 2f);
     }
 
-    private static void Trigger(Graphics g, Rectangle rect, string label, byte value)
+    private void Trigger(Graphics g, Rectangle rect, string label, byte value)
     {
         using var bgPen = new Pen(Idle, 1.5f);
         using var bgFill = new SolidBrush(IdleFill);
@@ -648,7 +658,7 @@ internal sealed class PadPanel : Panel
         g.DrawString(label, f, tb, rect.X + 3, rect.Y - 1);
     }
 
-    private static void Stick(Graphics g, int cx, int cy, int r, short ax, short ay, bool pressed)
+    private void Stick(Graphics g, int cx, int cy, int r, short ax, short ay, bool pressed)
     {
         var ring = new Rectangle(cx - r, cy - r, r * 2, r * 2);
         using (var pen = new Pen(pressed ? Accent : Idle, 2.5f))
@@ -662,11 +672,11 @@ internal sealed class PadPanel : Panel
         var dy = (int)(-ay / 32767f * maxOff);   // ay : haut = positif -> écran : vers le haut = -y
         var dotR = 9;
         var dot = new Rectangle(cx + dx - dotR, cy + dy - dotR, dotR * 2, dotR * 2);
-        using var db = new SolidBrush(pressed ? Accent : Color.FromArgb(120, 126, 138));
+        using var db = new SolidBrush(pressed ? Accent : Color.FromArgb(129, 117, 160));
         g.FillEllipse(db, dot);
     }
 
-    private static void Dpad(Graphics g, int cx, int cy, bool up, bool down, bool left, bool right)
+    private void Dpad(Graphics g, int cx, int cy, bool up, bool down, bool left, bool right)
     {
         const int arm = 22, t = 16;
         Arrow(g, new Rectangle(cx - t / 2, cy - arm, t, arm), up);
@@ -675,7 +685,7 @@ internal sealed class PadPanel : Panel
         Arrow(g, new Rectangle(cx, cy - t / 2, arm, t), right);
     }
 
-    private static void Arrow(Graphics g, Rectangle rect, bool on)
+    private void Arrow(Graphics g, Rectangle rect, bool on)
     {
         using var fill = new SolidBrush(on ? Accent : IdleFill);
         using var pen = new Pen(on ? Accent : Idle, 1.5f);
@@ -683,7 +693,7 @@ internal sealed class PadPanel : Panel
         g.DrawRectangle(pen, rect);
     }
 
-    private static void Pill(Graphics g, Rectangle rect, bool on)
+    private void Pill(Graphics g, Rectangle rect, bool on)
     {
         using var fill = new SolidBrush(on ? Accent : IdleFill);
         using var pen = new Pen(on ? Accent : Idle, 2f);

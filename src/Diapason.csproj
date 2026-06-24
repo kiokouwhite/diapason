@@ -12,7 +12,7 @@
     <RootNamespace>Diapason</RootNamespace>
     <!-- Version locale, comparée aux Releases GitHub pour la mise à jour intégrée.
          À BUMPER à chaque release, avec le tag GitHub (vX.Y) ET AppVersion dans installer/Diapason.iss. -->
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>logo.ico</ApplicationIcon>
